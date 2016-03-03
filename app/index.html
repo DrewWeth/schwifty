@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <!-- Optional theme -->
+    <link rel="stylesheet" href="css/bootstrap-theme.min.css">
+    <link rel="stylesheet" href="css/custom.css">
+    <!-- Latest compiled and minified JavaScript -->
+    <script src="js/react.js"></script>
+    <script src="js/react-dom.js"></script>
+    <script src="js/chart.js"></script>
+
+  </head>
+  <body>
+    <div class="container">
+      <div class="row">
+        <h1>Schwifty</h1>
+      </div>
+      <div class="row">
+        <h4>Text Messages Per Month of All Conversations</h4>
+        <div id="all-graph" height="150px;" width="100%">
+          <canvas id="canvas-all"></canvas>
+        </div>
+      </div>
+      <div class="row stats-row">
+        <div class="col-sm-4">
+          <div><b id="chats-count-value"></b></div>
+          <div>different converations</div>
+        </div>
+        <div class="col-sm-4">
+          <div><b id="messages-count-value"></b></div>
+          <div>total text messages</div>
+          <div>since <span id="first-text-date"></span></div>
+        </div>
+      </div>
+      <p id="messages"></p>
+      <div>
+        <select id="selectConvo" onchange="selectConvoChanged()">
+        </select>
+      </div>
+      <div id="individual-section" style="display: none;">
+        <div class="row stats-row">
+          <div class="col-sm-4">
+            <div><b id="life-in-days"></b> days between first and last messages</div>
+            <div>First message on <span id="first-message-date"></div>
+            <div>Last message on <span id="last-message-date"></span></div>
+          </div>
+        </div>
+        <div class="row stats-row">
+          <div class="col-sm-4">
+            <div><b id="messages-count-total"></b></div>
+            <div>total texts</div>
+            <div><b id="incoming-message-count"></b></div>
+            <div>incoming messages</div>
+            <div><b id="outgoing-message-count"></b></div>
+            <div>outgoing messages</div>
+          </div>
+          <div class="col-sm-4">
+            <div><b id="incoming-length-avg"></b></div>
+            <div>incoming length average</div>
+            <div><b id="outgoing-length-avg"></b></div>
+            <div>outgoing length average</div>
+          </div>
+          <div class="col-sm-4">
+            <div><b id="incoming-vocab-count"></b></div>
+            <div>incoming vocab size</div>
+            <div><b id="outgoing-vocab-count"></b></div>
+            <div>outgoing vocab size</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- <div id="statsArea" class="statsArea"></div> -->
+
+      <div id="individual-graph">
+        <canvas id="canvas-one"></canvas>
+      </div>
+      <!-- <div>
+        <button id="btnGo" class="btn btn-primary">Go!</button>
+      </div>
+      <p>
+      We are using node <script>document.write(process.versions.node)</script>,
+      Chrome <script>document.write(process.versions.chrome)</script>,
+      and Electron <script>document.write(process.versions.electron)</script>.
+      </p> -->
+      <div id="commentArea" class="commentArea"></div>
+    </div>
+    <script src="js/index.js"></script>
+  </body>
+</html>

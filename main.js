@@ -23,21 +23,38 @@
 
   function createWindow () {
     // Create the browser window.
-    mainWindow = new BrowserWindow({width: 800, height: 600});
+    mainWindow = new BrowserWindow({width: 1280, height: 800, minWidth:800, minHeight:600, title: "Schwifty Text Analyzer"});
+    // mainWindow.testData = "ayyy lmao";
 
     // and load the index.html of the app.
-    mainWindow.loadURL('file://' + __dirname + '/index.html');
+    mainWindow.loadURL('file://' + __dirname + '/app/index.html');
 
     // Open the DevTools.
     // mainWindow.webContents.openDevTools();
+    findContactsFromDb(function(uniqueContacts){
+      // mainWindow.webContents.on("did-finish-load", function(){
+        console.log("[notification]\tDb done loading");
+        var notif = { title:"Done Loading", body:"Database is done loading.", convos:uniqueContacts };
+        mainWindow.webContents.send("notify", notif);
+      // });
+    });
 
-
-    findContactsFromDb();
+    ipcMain.on("select-convo-changed", function(event, arg){
+      console.log(arg);
+      var result = {chat: messagesLookup[arg], stats: calculateStats(messagesLookup[arg])}
+      event.sender.send("select-convo-changed-reply", result);
+    });
 
     ipcMain.on('async-form', function(event, arg) {
       console.log(arg);
       event.sender.send('async-form-reply', messagesLookup[arg].length);
     });
+
+    ipcMain.on('goEvent', function(event, arg){
+      var notif = { title:"Ayyy lmao", body:"You pressed the button.", convos:uniqueContacts };
+      event.sender.send("notify", notif)
+      console.log();
+    })
 
     // Emitted when the window is closed.
     mainWindow.on('closed', function() {
@@ -48,19 +65,79 @@
     });
   }
 
+  function calculateStats(messages){
+    var outgoingCount = 0, incomingCount = 0, incomingLengthTotal = 0, outgoingLengthTotal = 0, incomingVocabCount = 0, outgoingVocabCount = 0;
+    var incomingVocabHash = {};
+    var outgoingVocabHash = {};
+
+    var lastMessageDate = Date.parse(messages[messages.length -1].date);
+    // console.log("[info]\tLast message date raw: " + messages[messages.length -1].date);
+    // console.log("[info]\tlast message date: " + lastMessageDate);
+
+    var firstMessageDate = Date.parse(messages[0].date);
+    // console.log("[info]\tFirst message date raw: " + messages[0].date);
+    // console.log("[info]\tfirst message date: " + firstMessageDate);
+
+    for(var i = 0; i < messages.length; i++){
+      // If outgoing
+      if (messages[i].is_from_me == "1"){
+        outgoingCount += 1;
+        outgoingLengthTotal += messages[i].message.length;
+        messages[i].message.split(" ").forEach(function(word){
+          var rawWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").toLowerCase(); // standardize words
+          if(outgoingVocabHash[rawWord] === undefined){
+            outgoingVocabCount += 1;
+            outgoingVocabHash[rawWord] = 1;
+          }else{
+            outgoingVocabHash[rawWord] += 1;
+          }
+        });
+      }else{ // If incoming
+        incomingCount += 1;
+        incomingLengthTotal += messages[i].message.length;
+        messages[i].message.split(" ").forEach(function(word){
+          var rawWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").toLowerCase(); // standardize words
+          if(incomingVocabHash[rawWord] === undefined){
+            incomingVocabCount += 1;
+            incomingVocabHash[rawWord] = 1;
+          }else{
+            incomingVocabHash[rawWord] += 1;
+          }
+        });
+      }
+    }
+    var textingIntensityPerSecond = ((incomingCount + outgoingCount) * 1.0) / ((lastMessageDate / 1000.0 - firstMessageDate / 1000.0) * 1.0);
+    var options = {
+      year: "numeric", month: "short",
+      day: "numeric"
+    };
+    var firstMessageFormatted = new Date(messages[0].date).toLocaleDateString("en-US", options);
+    var lastMessageFormatted = new Date(messages[messages.length - 1].date).toLocaleDateString("en-US", options);
+
+
+    var stats = {sentCount:outgoingCount,
+      receivedCount:incomingCount,
+      totalCount: (outgoingCount + incomingCount),
+      incomingLengthAverage:(incomingLengthTotal * 1.0 / incomingCount).toFixed(1),
+      outgoingLengthAverage:(outgoingLengthTotal * 1.0 / outgoingCount).toFixed(1),
+      incomingVocabCount: incomingVocabCount,
+      outgoingVocabCount: outgoingVocabCount,
+      vocabPerIncomingMessage: (incomingVocabCount * 1.0 / incomingCount).toFixed(1),
+      vocabPerOutgoingMessage: (outgoingVocabCount * 1.0 / outgoingCount).toFixed(1),
+      textingLifeAgeInDays: ((lastMessageDate - firstMessageDate) / 1000.0 / 60 / 60 / 24).toFixed(1),
+      textingIntensityPerDay: (textingIntensityPerSecond * 60.0 * 60.0 * 24.0),
+      firstMessageDate:firstMessageFormatted,
+      lastMessageDate: lastMessageFormatted
+    }
+    return stats
+
+  }
+
   function yank_messages_sql(){
-    var filename = "messages.sql";
+    var filename = "app/messages.sql";
     var filepath = path.join(__dirname, filename);
 
     return fs.readFileSync(filepath, 'utf8' );
-
-    //fs.readFile(filepath, 'utf8', function(err, contents){
-      //if (err){
-        //console.log("Error: " + err);
-      //}
-      //return contents;
-    //});
-    //return "what the fuck";
   }
 
   function selectMessages(db){
@@ -77,10 +154,11 @@
         if (err){
           console.log("Db select error: " + err);
         }
+        if (row.message == null){
+          row.message = "";
+        }
 
-        //console.log(inspect(row));
         messages.push(row);
-
       },function(){
         console.log("[done]\t" + messages.length + " messages were returned from on disk database.");
         parseMessages(messages);
@@ -89,23 +167,23 @@
   }
 
   function parseMessages(messages){
-    console.log("[parsing]")
-    // console.log(inspect(messages[0]), messages[0].message, messages[0].is_from_me, messages[0].date, messages[0].message);
+    console.log("[parsing]");
 
     messages.forEach(function(message){
       if (messagesLookup[message.chat_identifier] === undefined){
         messagesLookup[message.chat_identifier] = []
         messagesLookup[message.chat_identifier].push(message);
-
         uniqueContacts.push(message.chat_identifier);
       }else{
         messagesLookup[message.chat_identifier].push(message);
       }
     });
-    console.log("[info]\tUnique chat_identifiers => " + uniqueContacts.length + 1);
+    console.log("[info]\tUnique chat_identifiers => " + (uniqueContacts.length + 1));
+    var notif = {title:"Done loading chats", body:"Total chats: " + (uniqueContacts.length + 1)}
+    var loadedData = {messages: messages, uniqueContacts: uniqueContacts, messagesLookup: messagesLookup}
+    mainWindow.webContents.send("done-loading-chats", loadedData);
 
-
-    console.log("[outputting]")
+    console.log("[outputting]");
     var jsonMessages = JSON.stringify(messages);
     var outputFilepath = envHome + "/Desktop/output.txt"
     var tempData = [];
@@ -131,7 +209,7 @@
     return dir;
   }
 
-  function findContactsFromDb(){
+  function findContactsFromDb(callback){
     console.log("[detecting]")
     console.log("[info]\tprocess.env.HOME =>" + envHome);
     var isWin = /^win/.test(process.platform);
@@ -169,6 +247,7 @@
       selectMessages(db);
       db.close();
     }
+    callback(uniqueContacts);
   }
 
   // This method will be called when Electron has finished
