@@ -59,10 +59,15 @@ ipcRenderer.on("select-convo-changed-reply", function(event, arg){
   document.getElementById("last-message-date").innerHTML = stats.lastMessageDate;
 
   var lineChartData = getConversationGraph(arg["chat"]);
-  document.getElementById("canvas-one").style.display = "block";
+  var oldcanv = document.getElementById('canvas-one');
+  document.getElementById("individual-graph").removeChild(oldcanv)
+  var canv = document.createElement('canvas');
+  canv.id = 'canvas-one';
+  document.getElementById("individual-graph").appendChild(canv);
+
   var ctx = document.getElementById("canvas-one").getContext("2d");
-  	window.myLine = new Chart(ctx).Line(lineChartData, {
-  		responsive: true
+	window.myLine = new Chart(ctx).Line(lineChartData, {
+	   responsive: true
 	});
 
   var ChatBox = React.createClass({
@@ -109,7 +114,7 @@ function getConversationGraph(messages){
   var yData = [];
 
   var tempX = new Date(messages[0].date);
-  var tempY = 1;
+  var tempY = 0;
 
   messages.forEach(function(message){
     if (new Date(message.date).getMonth() === tempX.getMonth()){
@@ -136,7 +141,8 @@ function getConversationGraph(messages){
 				pointStrokeColor : "#fff",
 				pointHighlightFill : "#fff",
 				pointHighlightStroke : "rgba(220,220,220,1)",
-				data : yData
+				data : yData,
+        showXLabels: 10,
 			}
 		]
 	}
