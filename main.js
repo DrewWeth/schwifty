@@ -18,12 +18,15 @@
 
   var envHome = process.env.HOME;
   var messagesDbFilename = "3d0d7e5fb2ce288813306e4d4636395e047a3d28";
+  var contactsDbFilename = "31bb7ba8914766d4ba40d6dfb6113c8b614be442";
   var messagesLookup = {};
   var uniqueContacts = [];
+  var messages_filepath = "", contacts_filepath = "";
+
 
   function createWindow () {
     // Create the browser window.
-    mainWindow = new BrowserWindow({width: 1280, height: 800, minWidth:800, minHeight:600, title: "Schwifty Text Analyzer"});
+    mainWindow = new BrowserWindow({width: 1280, height: 600, minWidth:800, minHeight:600, title: "Schwifty Text Analyzer"});
     // mainWindow.testData = "ayyy lmao";
 
     // and load the index.html of the app.
@@ -36,7 +39,6 @@
         console.log("[notification]\tDb done loading");
         var notif = { title:"Done Loading", body:"Database is done loading.", convos:uniqueContacts };
         mainWindow.webContents.send("notify", notif);
-      // });
     });
 
     ipcMain.on("select-convo-changed", function(event, arg){
@@ -114,7 +116,6 @@
     var firstMessageFormatted = new Date(messages[0].date).toLocaleDateString("en-US", options);
     var lastMessageFormatted = new Date(messages[messages.length - 1].date).toLocaleDateString("en-US", options);
 
-
     var stats = {sentCount:outgoingCount,
       receivedCount:incomingCount,
       totalCount: (outgoingCount + incomingCount),
@@ -140,17 +141,58 @@
     return fs.readFileSync(filepath, 'utf8' );
   }
 
-  function selectMessages(db){
-    if (db == null)
+  function yank_contacts_sql(){
+    var filename = "app/contacts.sql";
+    var filepath = path.join(__dirname, filename);
+
+    return fs.readFileSync(filepath, 'utf8' );
+  }
+
+  function selectContacts(db){
+    var contacts_sql = yank_contacts_sql();
+    // console.log(contacts_sql);
+
+    db.serialize(function(){
+      var contacts = [];
+      db.each(contacts_sql, function(err, row){
+        if (err){
+          console.log("Db select error: " + err);
+        }
+
+        contacts.push(row);
+      },function(){
+        console.log("[done]\t" + contacts.length + " contacts were returned from on disk database.");
+        parseContacts(contacts);
+      });
+    });
+  }
+
+  function parseContacts(contacts){
+    var contactLookup = {}
+    contacts.forEach(function(contact){
+      if (contact.phone_mobile != null){
+        var numericNumber = contact.phone_mobile.replace(/\D/g,'');
+        contactLookup[numericNumber] = contact;
+      }
+    });
+    return contactLookup;
+  }
+
+
+  function selectFromDbs(messagesDb, contactsDbExists){
+
+    if (messagesDb == null)
       return null;
 
     // Gets SQL statement from file.
     var messages_sql = yank_messages_sql();
+    var contacts_sql = yank_contacts_sql();
 
     console.log("[querying]\tSQL => " + messages_sql);
-    db.serialize(function(){
+
+    messagesDb.serialize(function(){
       var messages = [];
-      db.each(messages_sql, function(err, row){
+      messagesDb.each(messages_sql, function(err, row){
         if (err){
           console.log("Db select error: " + err);
         }
@@ -160,14 +202,40 @@
 
         messages.push(row);
       },function(){
+        messagesDb.close();
         console.log("[done]\t" + messages.length + " messages were returned from on disk database.");
-        parseMessages(messages);
+
+        var contactsDb = new sqlite3.Database(contacts_filepath);
+        if(contactsDbExists){
+          contactsDb.serialize(function(){
+            var contacts = [];
+            contactsDb.each(contacts_sql, function(err, row){
+              if (err){
+                console.log("Db select error: " + err);
+              }
+
+              contacts.push(row);
+            },function(){
+              contactsDb.close();
+              console.log("[done]\t" + contacts.length + " contacts were returned from on disk database.");
+              parseMessages(messages, contacts);
+            }
+            );
+          });
+        }else{ // No contacts Db, but messages completes.
+          console.log("[done]\t" + messages.length + " messages were returned from on disk database. NOT parsing contacts.");
+          parseMessages(messages, null);
+        }
       });
     });
   }
 
-  function parseMessages(messages){
+  function parseMessages(messages, contacts){
     console.log("[parsing]");
+    var contactLookup = {}
+    if (contacts != null){
+      contactLookup = parseContacts(contacts);
+    }
 
     messages.forEach(function(message){
       if (messagesLookup[message.chat_identifier] === undefined){
@@ -178,10 +246,27 @@
         messagesLookup[message.chat_identifier].push(message);
       }
     });
-    console.log("[info]\tUnique chat_identifiers => " + (uniqueContacts.length + 1));
-    var notif = {title:"Done loading chats", body:"Total chats: " + (uniqueContacts.length + 1)}
-    var loadedData = {messages: messages, uniqueContacts: uniqueContacts, messagesLookup: messagesLookup}
+
+    var stats = {}
+    var incomingInit = 0;
+    var outgoingInit = 0;
+    uniqueContacts.forEach(function(chat){
+      if (messagesLookup[chat][0].is_from_me == "1"){
+        outgoingInit += 1;
+      }else{
+        incomingInit += 1;
+      }
+    });
+    var stats = {incomingInit: incomingInit,
+      outgoingInit: outgoingInit
+    };
+
+
+    console.log("[info]\tUnique chat_identifiers => " + (uniqueContacts.length));
+    var notif = {title:"Done loading chats", body:"Total chats: " + (uniqueContacts.length)}
+    var loadedData = {messages: messages, uniqueContacts: uniqueContacts, messagesLookup: messagesLookup, stats:stats, contactLookup: contactLookup}
     mainWindow.webContents.send("done-loading-chats", loadedData);
+    console.log(stats)
 
     console.log("[outputting]");
     var jsonMessages = JSON.stringify(messages);
@@ -214,7 +299,6 @@
     console.log("[info]\tprocess.env.HOME =>" + envHome);
     var isWin = /^win/.test(process.platform);
     var isMac = /darwin/.test(process.platform);
-    var filepath = "";
     if (isWin){
       console.log("[done]\tDetected Windows OS");
     }else if (isMac) {
@@ -232,21 +316,32 @@
       console.log("[info]\tThere are " + (files.length + 1) + " folders")
       console.log("[info]\tMost recent folder => " + mostRecentFolder);
 
-      filepath = envHome + backupExt + mostRecentFolder + "/" + messagesDbFilename;
+      messages_filepath = envHome + backupExt + mostRecentFolder + "/" + messagesDbFilename;
+      contacts_filepath = envHome + backupExt + mostRecentFolder + "/" + contactsDbFilename;
     }
     else{
       console.log("Problem detecting OS");
     }
 
-    console.log("[done]\tDetected filepath => " + filepath);
+    console.log("[done]\tDetected messages filepath => " + messages_filepath);
+    console.log("[done]\tDetected contacts filepath => " + contacts_filepath);
 
     //var dbdata = fs.readFileSync(filepath);
-    var exists = fs.existsSync(filepath);
-    if (exists){
-      var db = new sqlite3.Database(filepath);
-      selectMessages(db);
-      db.close();
+    var messagesExists = fs.existsSync(messages_filepath);
+    if (messagesExists){
+      var messagesDb = new sqlite3.Database(messages_filepath);
+      var contactsExist = fs.existsSync(contacts_filepath);
+      if(contactsExist){
+        selectFromDbs(messagesDb, true);
+      }else{
+        selectFromDbs(messagesDb, false);
+      }
+
+    }else {
+      console.log("ERROR");
     }
+
+
     callback(uniqueContacts);
   }
 
