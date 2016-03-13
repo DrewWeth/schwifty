@@ -6,6 +6,8 @@
   // const spawn = require('child_process').spawn;
   // const ls = spawn('ls', ['-lh', '/usr']);
 
+  var winston = require('winston');
+
   const electron = require('electron');
   // Module to control application life.
   const app = electron.app;
@@ -23,6 +25,18 @@
   var uniqueContacts = [];
   var messages_filepath = "", contacts_filepath = "";
 
+  var logger = new (winston.Logger)({
+    transports: [
+      new (winston.transports.Console)({ json: false, timestamp: true }),
+      new winston.transports.File({ filename: __dirname + '/debug.log', json: false })
+    ],
+    exceptionHandlers: [
+      new (winston.transports.Console)({ json: false, timestamp: true }),
+      new winston.transports.File({ filename: __dirname + '/exceptions.log', json: false })
+    ],
+    exitOnError: false
+  });
+  
 
   function createWindow () {
     // Create the browser window.
@@ -72,7 +86,7 @@
     var incomingVocabHash = {};
     var outgoingVocabHash = {};
 
-    var lastMessageDate = Date.parse(messages[messages.length -1].date);
+    var lastMessageDate = Date.parse(messages[messages.length - 1].date); // Error here on Maggie's computer
     // console.log("[info]\tLast message date raw: " + messages[messages.length -1].date);
     // console.log("[info]\tlast message date: " + lastMessageDate);
 
@@ -161,6 +175,7 @@
 
         contacts.push(row);
       },function(){
+        console.log(contacts[0]);
         console.log("[done]\t" + contacts.length + " contacts were returned from on disk database.");
         parseContacts(contacts);
       });
@@ -168,13 +183,29 @@
   }
 
   function parseContacts(contacts){
+    var numbersByPriority = ["phone_mobile", "phone_work", "phone_other", "phone_iphone", "phone_main"]
     var contactLookup = {}
+    var contactsFoundCount = 0;
+    var stillSearching = true;
     contacts.forEach(function(contact){
-      if (contact.phone_mobile != null){
-        var numericNumber = contact.phone_mobile.replace(/\D/g,'');
-        contactLookup[numericNumber] = contact;
+      numbersByPriority.forEach(function(number){
+        if(stillSearching){
+          if (contact[number] != null){
+            var numericNumber = contact[number].replace(/\D/g,'');
+            if (numericNumber.toString().length == 10){
+              numericNumber = Number("1" + numericNumber)
+            }
+            stillSearching = false;
+            contactsFoundCount += 1;
+            contactLookup[numericNumber] = contact;
+          }
+        }
+      });
+      if(stillSearching == true){
       }
+      stillSearching = true;
     });
+    console.log("[info]\t" + contactsFoundCount + " separate contacts found.")
     return contactLookup;
   }
 
@@ -219,8 +250,7 @@
               contactsDb.close();
               console.log("[done]\t" + contacts.length + " contacts were returned from on disk database.");
               parseMessages(messages, contacts);
-            }
-            );
+            });
           });
         }else{ // No contacts Db, but messages completes.
           console.log("[done]\t" + messages.length + " messages were returned from on disk database. NOT parsing contacts.");
@@ -239,7 +269,7 @@
 
     messages.forEach(function(message){
       if (messagesLookup[message.chat_identifier] === undefined){
-        messagesLookup[message.chat_identifier] = []
+        messagesLookup[message.chat_identifier] = [];
         messagesLookup[message.chat_identifier].push(message);
         uniqueContacts.push(message.chat_identifier);
       }else{
@@ -257,11 +287,30 @@
         incomingInit += 1;
       }
     });
+
+
+    var allConversationsStats = calculateStats(messagesLookup[uniqueContacts[0]]);
+
+    console.log("[info]\tInitial stats: " + JSON.stringify(allConversationsStats))
+    for(var i = 1; i < uniqueContacts.length; i++){
+      var tempStats = calculateStats(messagesLookup[uniqueContacts[i]]);
+      Object.keys(tempStats).forEach(function(key){
+        if (!isNaN(tempStats[key])) {
+          allConversationsStats[key] = parseFloat(allConversationsStats[key]) +  parseFloat(tempStats[key]);
+        }
+      });
+    }
+    console.log("[info]\tAll Stats Total:" + JSON.stringify(allConversationsStats));
+
+    Object.keys(tempStats).forEach(function(key){
+      allConversationsStats[key] /= uniqueContacts.length
+    });
+
+    console.log("[info]\tAll Stats Avg:" + JSON.stringify(allConversationsStats));
     var stats = {incomingInit: incomingInit,
-      outgoingInit: outgoingInit
+      outgoingInit: outgoingInit,
+      allConversationsStats: allConversationsStats
     };
-
-
     console.log("[info]\tUnique chat_identifiers => " + (uniqueContacts.length));
     var notif = {title:"Done loading chats", body:"Total chats: " + (uniqueContacts.length)}
     var loadedData = {messages: messages, uniqueContacts: uniqueContacts, messagesLookup: messagesLookup, stats:stats, contactLookup: contactLookup}
@@ -357,6 +406,7 @@
       app.quit();
     }
   });
+
 
   app.on('activate', function () {
     // On OS X it's common to re-create a window in the app when the

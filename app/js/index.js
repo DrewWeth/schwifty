@@ -25,6 +25,8 @@ ipcRenderer.on("done-loading-chats", function(event, args){
   document.getElementById("messages-count-value").innerHTML = Humanize.intComma(messages.length);
   document.getElementById("incoming-init").innerHTML = stats["incomingInit"];
   document.getElementById("outgoing-init").innerHTML = stats["outgoingInit"];
+  document.getElementById("all-incoming-avg").innerHTML = stats["allConversationsStats"]["incomingLengthAverage"].toFixed(1)
+  document.getElementById("all-outgoing-avg").innerHTML = stats["allConversationsStats"]["outgoingLengthAverage"].toFixed(1)
   var options = {
     year: "numeric", month: "short",
     day: "numeric"
@@ -38,18 +40,20 @@ ipcRenderer.on("done-loading-chats", function(event, args){
       link.id=chat;
 
       var contact = contactLookup[chat.replace(/\D/g,'')]
-      if(contact === undefined){
-        var textNumber = document.createTextNode(chat);
-        link.appendChild(textNumber);
+
+      if(contact === undefined || contact == null){
+
       }else{
-        var textName = document.createTextNode(contact.First + " " + contact.Last + " ");
-        var textNumber = document.createTextNode(chat);
-        link.appendChild(textName);
-        link.appendChild(textNumber);
+        var textName = document.createTextNode(contact.First + " " + contact.Last);
+        var nameDiv = document.createElement("div").appendChild(textName)
+        link.appendChild(nameDiv);
       }
+
+      var textNumber = document.createTextNode(chat);
+      var numberDiv = document.createElement("div").appendChild(textNumber)
+      link.appendChild(numberDiv);
+
       // option.appendChild(text);
-
-
       // selectConvo.appendChild(option);
       chatList.appendChild(link);
   });
@@ -202,7 +206,6 @@ function getConversationGraph(messages){
 
   return lineChartData;
 }
-
 
 ipcRenderer.on("notify", function(event, arg){
   // document.getElementById("selectConvo").append(arg["convos"]);

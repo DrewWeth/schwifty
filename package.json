@@ -25,13 +25,12 @@
   },
   "homepage": "https://github.com/atom/electron-quick-start#readme",
   "devDependencies": {
+    "electron-packager": "^5.2.1",
     "electron-prebuilt": "^0.36.0"
   },
   "dependencies": {
     "jquery": "^2.2.0",
     "react": "^0.13.3",
     "humanize-plus": "1.5.x"
-
-
   }
 }

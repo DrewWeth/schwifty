@@ -16,6 +16,7 @@
     <div class="container">
       <div class="row col-sm-12">
         <h1>Schwifty Text Analyzer</h1>
+        <script>document.write(process.versions.electron)</script>
       </div>
       <div class="row stats-row">
         <div class="col-sm-4">
@@ -34,6 +35,19 @@
           <div>times you texted first</div>
         </div>
       </div>
+      <div class="row stats-row">
+        <div class="col-sm-4">
+          <div><b id="all-incoming-avg"></b></div>
+          <div>average characters of all incoming messages</div>
+        </div>
+        <div class="col-sm-4">
+          <div><b id="all-outgoing-avg"></b></div>
+          <div>average characters of all outgoing messages</div>
+        </div>
+        <div class="col-sm-4">
+
+        </div>
+      </div>
       <div class="row col-sm-12">
         <h4>Text Messages Per Month of All Conversations</h4>
         <div id="all-graph" height="150px;" width="100%">
@@ -42,7 +56,7 @@
       </div>
       <p id="messages"></p>
       <div class="row">
-        <div class="col-md-3">
+        <div class="col-sm-3">
           <div>
             <!-- <select id="selectConvo" onchange="selectConvoChanged()"> -->
             </select>
@@ -53,7 +67,7 @@
               <div id="searchlist" class="list-group"></div>
           </div>
         </div>
-        <div class="col-md-9">
+        <div class="col-sm-9">
           <div id="individual-section" style="display: none;">
             <div class="row stats-row">
               <div class="col-sm-4">
