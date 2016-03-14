@@ -1,1 +1,0 @@
-SELECT message.is_from_me, datetime(message.date + 978220801 + 64800, 'unixepoch') as date, chat.chat_identifier, REPLACE(REPLACE(message.text, char(10), ''), char(13), '') as message FROM chat JOIN chat_message_join on chat.ROWID = chat_message_join.chat_id JOIN message on message.ROWID = chat_message_join.message_id order by message.date;
