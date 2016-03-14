@@ -36,41 +36,55 @@
     ],
     exitOnError: false
   });
-  
+
+
 
   function createWindow () {
     // Create the browser window.
     mainWindow = new BrowserWindow({width: 1280, height: 600, minWidth:800, minHeight:600, title: "Schwifty Text Analyzer"});
+    mainWindow.openDevTools();
+
     // mainWindow.testData = "ayyy lmao";
 
     // and load the index.html of the app.
-    mainWindow.loadURL('file://' + __dirname + '/app/index.html');
+    mainWindow.loadURL('file://' + __dirname + '/app/setup.html');
+
+    ipcMain.on("link-setup-page", function(event, arg){
+      mainWindow.loadURL('file://' + __dirname + '/app/setup.html');
+    });
+
+    ipcMain.on("backup-selected", function(event, arg){
+      console.log(arg);
+      messagesLookup = {};
+      uniqueContacts = [];
+      mainWindow.loadURL('file://' + __dirname + '/app/index.html');
+      searchByBackup(arg);
+    });
 
     // Open the DevTools.
     // mainWindow.webContents.openDevTools();
-    findContactsFromDb(function(uniqueContacts){
-      // mainWindow.webContents.on("did-finish-load", function(){
-        console.log("[notification]\tDb done loading");
-        var notif = { title:"Done Loading", body:"Database is done loading.", convos:uniqueContacts };
-        mainWindow.webContents.send("notify", notif);
+    ipcMain.on("setup-page-loaded", function(event, args){
+      findContactsFromDb();
     });
 
     ipcMain.on("select-convo-changed", function(event, arg){
-      console.log(arg);
+      printLog(arg);
       var result = {chat: messagesLookup[arg], stats: calculateStats(messagesLookup[arg])}
       event.sender.send("select-convo-changed-reply", result);
     });
 
     ipcMain.on('async-form', function(event, arg) {
-      console.log(arg);
+      printLog(arg);
       event.sender.send('async-form-reply', messagesLookup[arg].length);
     });
 
     ipcMain.on('goEvent', function(event, arg){
       var notif = { title:"Ayyy lmao", body:"You pressed the button.", convos:uniqueContacts };
       event.sender.send("notify", notif)
-      console.log();
-    })
+      printLog();
+    });
+
+
 
     // Emitted when the window is closed.
     mainWindow.on('closed', function() {
@@ -81,18 +95,24 @@
     });
   }
 
+  function printLog(value){
+    mainWindow.webContents.on('did-finish-load', function() {
+        mainWindow.webContents.send('send-console', value);
+    });
+  }
+
   function calculateStats(messages){
     var outgoingCount = 0, incomingCount = 0, incomingLengthTotal = 0, outgoingLengthTotal = 0, incomingVocabCount = 0, outgoingVocabCount = 0;
     var incomingVocabHash = {};
     var outgoingVocabHash = {};
 
     var lastMessageDate = Date.parse(messages[messages.length - 1].date); // Error here on Maggie's computer
-    // console.log("[info]\tLast message date raw: " + messages[messages.length -1].date);
-    // console.log("[info]\tlast message date: " + lastMessageDate);
+    // printLog("[info]\tLast message date raw: " + messages[messages.length -1].date);
+    // printLog("[info]\tlast message date: " + lastMessageDate);
 
     var firstMessageDate = Date.parse(messages[0].date);
-    // console.log("[info]\tFirst message date raw: " + messages[0].date);
-    // console.log("[info]\tfirst message date: " + firstMessageDate);
+    // printLog("[info]\tFirst message date raw: " + messages[0].date);
+    // printLog("[info]\tfirst message date: " + firstMessageDate);
 
     for(var i = 0; i < messages.length; i++){
       // If outgoing
@@ -128,9 +148,14 @@
       day: "numeric"
     };
     var firstMessageFormatted = new Date(messages[0].date).toLocaleDateString("en-US", options);
-    var lastMessageFormatted = new Date(messages[messages.length - 1].date).toLocaleDateString("en-US", options);
+    if (messages.length > 0){
+      var lastMessageFormatted = new Date(messages[messages.length - 1].date).toLocaleDateString("en-US", options);
+    }else{
+      var lastMessageFormatted = new Date(messages[0].date).toLocaleDateString("en-US", options);
+    }
 
-    var stats = {sentCount:outgoingCount,
+
+    var stats = { sentCount:outgoingCount,
       receivedCount:incomingCount,
       totalCount: (outgoingCount + incomingCount),
       incomingLengthAverage:(incomingLengthTotal * 1.0 / incomingCount).toFixed(1),
@@ -164,19 +189,19 @@
 
   function selectContacts(db){
     var contacts_sql = yank_contacts_sql();
-    // console.log(contacts_sql);
+    // printLog(contacts_sql);
 
     db.serialize(function(){
       var contacts = [];
       db.each(contacts_sql, function(err, row){
         if (err){
-          console.log("Db select error: " + err);
+          printLog("Db select error: " + err);
         }
 
         contacts.push(row);
       },function(){
-        console.log(contacts[0]);
-        console.log("[done]\t" + contacts.length + " contacts were returned from on disk database.");
+        printLog(contacts[0]);
+        printLog("[done]\t" + contacts.length + " contacts were returned from on disk database.");
         parseContacts(contacts);
       });
     });
@@ -205,55 +230,59 @@
       }
       stillSearching = true;
     });
-    console.log("[info]\t" + contactsFoundCount + " separate contacts found.")
+    printLog("[info]\t" + contactsFoundCount + " separate contacts found.")
     return contactLookup;
   }
 
 
   function selectFromDbs(messagesDb, contactsDbExists){
 
-    if (messagesDb == null)
-      return null;
-
     // Gets SQL statement from file.
     var messages_sql = yank_messages_sql();
     var contacts_sql = yank_contacts_sql();
 
-    console.log("[querying]\tSQL => " + messages_sql);
+    printLog("[querying]\tSQL => " + messages_sql);
 
     messagesDb.serialize(function(){
       var messages = [];
+      var messagesCount = 0;
       messagesDb.each(messages_sql, function(err, row){
         if (err){
-          console.log("Db select error: " + err);
+          printLog("Db select error: " + err);
         }
         if (row.message == null){
           row.message = "";
         }
+        messagesCount += 1;
 
         messages.push(row);
       },function(){
+        printLog("messagesCount: " + messagesCount);
         messagesDb.close();
-        console.log("[done]\t" + messages.length + " messages were returned from on disk database.");
+        printLog("[done]\t" + messages.length + " messages were returned from on disk database.");
 
         var contactsDb = new sqlite3.Database(contacts_filepath);
         if(contactsDbExists){
           contactsDb.serialize(function(){
             var contacts = [];
+            var contactsCount = 0;
             contactsDb.each(contacts_sql, function(err, row){
               if (err){
-                console.log("Db select error: " + err);
+                printLog("Db select error: " + err);
               }
+              contactsCount += 1;
 
               contacts.push(row);
             },function(){
+
+              printLog("contactsCount: " + contactsCount);
               contactsDb.close();
-              console.log("[done]\t" + contacts.length + " contacts were returned from on disk database.");
+              printLog("[done]\t" + contacts.length + " contacts were returned from on disk database.");
               parseMessages(messages, contacts);
             });
           });
         }else{ // No contacts Db, but messages completes.
-          console.log("[done]\t" + messages.length + " messages were returned from on disk database. NOT parsing contacts.");
+          printLog("[done]\t" + messages.length + " messages were returned from on disk database. NOT parsing contacts.");
           parseMessages(messages, null);
         }
       });
@@ -261,7 +290,7 @@
   }
 
   function parseMessages(messages, contacts){
-    console.log("[parsing]");
+    printLog("[parsing]");
     var contactLookup = {}
     if (contacts != null){
       contactLookup = parseContacts(contacts);
@@ -287,11 +316,9 @@
         incomingInit += 1;
       }
     });
-
-
     var allConversationsStats = calculateStats(messagesLookup[uniqueContacts[0]]);
 
-    console.log("[info]\tInitial stats: " + JSON.stringify(allConversationsStats))
+    printLog("[info]\tInitial stats: " + JSON.stringify(allConversationsStats))
     for(var i = 1; i < uniqueContacts.length; i++){
       var tempStats = calculateStats(messagesLookup[uniqueContacts[i]]);
       Object.keys(tempStats).forEach(function(key){
@@ -300,24 +327,24 @@
         }
       });
     }
-    console.log("[info]\tAll Stats Total:" + JSON.stringify(allConversationsStats));
+    printLog("[info]\tAll Stats Total:" + JSON.stringify(allConversationsStats));
 
     Object.keys(tempStats).forEach(function(key){
       allConversationsStats[key] /= uniqueContacts.length
     });
 
-    console.log("[info]\tAll Stats Avg:" + JSON.stringify(allConversationsStats));
+    printLog("[info]\tAll Stats Avg:" + JSON.stringify(allConversationsStats));
     var stats = {incomingInit: incomingInit,
       outgoingInit: outgoingInit,
       allConversationsStats: allConversationsStats
     };
-    console.log("[info]\tUnique chat_identifiers => " + (uniqueContacts.length));
+    printLog("[info]\tUnique chat_identifiers => " + (uniqueContacts.length));
     var notif = {title:"Done loading chats", body:"Total chats: " + (uniqueContacts.length)}
     var loadedData = {messages: messages, uniqueContacts: uniqueContacts, messagesLookup: messagesLookup, stats:stats, contactLookup: contactLookup}
     mainWindow.webContents.send("done-loading-chats", loadedData);
-    console.log(stats)
+    printLog(stats)
 
-    console.log("[outputting]");
+    printLog("[outputting]");
     var jsonMessages = JSON.stringify(messages);
     var outputFilepath = envHome + "/Desktop/output.txt"
     var tempData = [];
@@ -329,9 +356,9 @@
 
      fs.writeFile(outputFilepath, lines.join("\n"), function(err) {
          if(err) {
-            return console.log(err);
+            return printLog(err);
         }
-        console.log("[done] saved file to " + outputFilepath);
+        printLog("[done] saved file to " + outputFilepath);
     });
 
     mainWindow.webContents.send("message-analysis-complete", messages);
@@ -343,15 +370,15 @@
     return dir;
   }
 
-  function findContactsFromDb(callback){
-    console.log("[detecting]")
-    console.log("[info]\tprocess.env.HOME =>" + envHome);
+  function findContactsFromDb(){
+    printLog("[detecting]");
+    printLog("[info]\tprocess.env.HOME =>" + envHome);
     var isWin = /^win/.test(process.platform);
     var isMac = /darwin/.test(process.platform);
     if (isWin){
-      console.log("[done]\tDetected Windows OS");
+      printLog("[done]\tDetected Windows OS");
     }else if (isMac) {
-      console.log("[done]\tDetected Mac OS");
+      printLog("[done]\tDetected Mac OS");
       var backupExt = "/Library/Application Support/MobileSync/Backup/"
       var files = fs.readdirSync(envHome + backupExt);
 
@@ -360,38 +387,40 @@
            return fs.statSync(envHome + backupExt + a).mtime.getTime() -
                   fs.statSync(envHome + backupExt + b).mtime.getTime();
       });
-      var mostRecentFolder = files[0];
 
-      console.log("[info]\tThere are " + (files.length + 1) + " folders")
-      console.log("[info]\tMost recent folder => " + mostRecentFolder);
-
-      messages_filepath = envHome + backupExt + mostRecentFolder + "/" + messagesDbFilename;
-      contacts_filepath = envHome + backupExt + mostRecentFolder + "/" + contactsDbFilename;
+      printLog("[info]\tThere are " + (files.length) + " folders")
+      console.log(files);
+      mainWindow.webContents.send("backups-found", files);
+      messages_filepath = envHome + backupExt;
+      contacts_filepath = envHome + backupExt;
     }
     else{
-      console.log("Problem detecting OS");
+      printLog("Problem detecting OS");
     }
 
-    console.log("[done]\tDetected messages filepath => " + messages_filepath);
-    console.log("[done]\tDetected contacts filepath => " + contacts_filepath);
+    printLog("[done]\tDetected messages filepath => " + messages_filepath);
+    printLog("[done]\tDetected contacts filepath => " + contacts_filepath);
+  }
 
-    //var dbdata = fs.readFileSync(filepath);
+  function searchByBackup(selectedFolder){
+    messages_filepath = messages_filepath + selectedFolder + "/" + messagesDbFilename;
+    contacts_filepath = contacts_filepath + selectedFolder + "/" + contactsDbFilename;
+
     var messagesExists = fs.existsSync(messages_filepath);
     if (messagesExists){
+      printLog("messagesExists exists");
       var messagesDb = new sqlite3.Database(messages_filepath);
       var contactsExist = fs.existsSync(contacts_filepath);
       if(contactsExist){
+        printLog("contactsExist exists")
         selectFromDbs(messagesDb, true);
       }else{
+        printLog("contactsExist do not exist")
         selectFromDbs(messagesDb, false);
       }
-
     }else {
-      console.log("ERROR");
+      printLog("messagesExists not does exist");
     }
-
-
-    callback(uniqueContacts);
   }
 
   // This method will be called when Electron has finished

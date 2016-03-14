@@ -12,6 +12,14 @@ var ipcRenderer = require('electron').ipcRenderer;
 //   ipcRenderer.send("goEvent", true);
 // }
 
+ipcRenderer.on("send-console", function(event, args){
+  console.log(args);
+});
+
+document.getElementById("setup-link").addEventListener("click", function(e){
+  ipcRenderer.send("link-setup-page", true);
+});
+
 ipcRenderer.on("done-loading-chats", function(event, args){
   var uniqueContacts = args["uniqueContacts"];
   var messages = args["messages"];
@@ -33,29 +41,29 @@ ipcRenderer.on("done-loading-chats", function(event, args){
   };
   document.getElementById("first-text-date").innerHTML = (new Date(messages[0].date)).toLocaleDateString("en-US", options);
   uniqueContacts.forEach(function(chat){
-      // var option = document.createElement("option");
-      // var text = document.createTextNode(chat);
-      var link = document.createElement("a");
-      link.className += " list-group-item convoButton";
-      link.id=chat;
+    // var option = document.createElement("option");
+    // var text = document.createTextNode(chat);
+    var link = document.createElement("a");
+    link.className += " list-group-item convoButton";
+    link.id=chat;
 
-      var contact = contactLookup[chat.replace(/\D/g,'')]
+    var contact = contactLookup[chat.replace(/\D/g,'')]
 
-      if(contact === undefined || contact == null){
+    if(contact === undefined || contact == null){
 
-      }else{
-        var textName = document.createTextNode(contact.First + " " + contact.Last);
-        var nameDiv = document.createElement("div").appendChild(textName)
-        link.appendChild(nameDiv);
-      }
+    }else{
+      var textName = document.createTextNode(contact.First + " " + contact.Last);
+      var nameDiv = document.createElement("div").appendChild(textName)
+      link.appendChild(nameDiv);
+    }
 
-      var textNumber = document.createTextNode(chat);
-      var numberDiv = document.createElement("div").appendChild(textNumber)
-      link.appendChild(numberDiv);
+    var textNumber = document.createTextNode(chat);
+    var numberDiv = document.createElement("div").appendChild(textNumber)
+    link.appendChild(numberDiv);
 
-      // option.appendChild(text);
-      // selectConvo.appendChild(option);
-      chatList.appendChild(link);
+    // option.appendChild(text);
+    // selectConvo.appendChild(option);
+    chatList.appendChild(link);
   });
 
   trackConvoButtons();
@@ -75,14 +83,14 @@ function selectConvoChanged(){
 function trackConvoButtons(){
 
   document.getElementById("searchlist").addEventListener("click",function(e) {
-        // e.target is our targetted element.
-                    // try doing console.log(e.target.nodeName), it will result LI
-        if(e.target && e.target.nodeName == "A") {
-            // console.log(e.target.id + " was clicked");
-            ipcRenderer.send("select-convo-changed", e.target.id);
+    // e.target is our targetted element.
+                // try doing console.log(e.target.nodeName), it will result LI
+    if(e.target && e.target.nodeName == "A") {
+        // console.log(e.target.id + " was clicked");
+        ipcRenderer.send("select-convo-changed", e.target.id);
 
-        }
-    });
+    }
+  });
 }
 
 $("#individual-search").keyup(function () {
@@ -175,7 +183,7 @@ function getConversationGraph(messages){
     var currentMonth = new Date(message.date).getMonth();
     if (currentMonth === tempX.getMonth()){
       tempY += 1;
-    }else{
+    } else {
       xData.push(dateFormat(tempX, "mmmm, yyyy"));
       yData.push(tempY);
 
