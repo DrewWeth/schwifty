@@ -25,17 +25,17 @@
   var uniqueContacts = [];
   var messages_filepath = "", contacts_filepath = "";
 
-  var logger = new (winston.Logger)({
-    transports: [
-      new (winston.transports.Console)({ json: false, timestamp: true }),
-      new winston.transports.File({ filename: __dirname + '/debug.log', json: false })
-    ],
-    exceptionHandlers: [
-      new (winston.transports.Console)({ json: false, timestamp: true }),
-      new winston.transports.File({ filename: __dirname + '/exceptions.log', json: false })
-    ],
-    exitOnError: false
-  });
+  // var logger = new (winston.Logger)({
+  //   transports: [
+  //     new (winston.transports.Console)({ json: false, timestamp: true }),
+  //     new winston.transports.File({ filename: __dirname + '/debug.log', json: false })
+  //   ],
+  //   exceptionHandlers: [
+  //     new (winston.transports.Console)({ json: false, timestamp: true }),
+  //     new winston.transports.File({ filename: __dirname + '/exceptions.log', json: false })
+  //   ],
+  //   exitOnError: false
+  // });
 
 
 
@@ -102,11 +102,35 @@
   }
 
   function calculateStats(messages){
+    if (messages === undefined || messages == null){
+      var stats = { sentCount:0,
+        receivedCount:0,
+        totalCount: 0,
+        incomingLengthAverage:0,
+        outgoingLengthAverage:0,
+        incomingVocabCount:0,
+        outgoingVocabCount: 0,
+        vocabPerIncomingMessage:0,
+        vocabPerOutgoingMessage: 0,
+        textingLifeAgeInDays:0,
+        textingIntensityPerDay: 0,
+        firstMessageDate: new Date(),
+        lastMessageDate: new Date()
+      };
+      // console.log(stats);
+      return stats;
+    }
+
     var outgoingCount = 0, incomingCount = 0, incomingLengthTotal = 0, outgoingLengthTotal = 0, incomingVocabCount = 0, outgoingVocabCount = 0;
     var incomingVocabHash = {};
     var outgoingVocabHash = {};
 
-    var lastMessageDate = Date.parse(messages[messages.length - 1].date); // Error here on Maggie's computer
+    if (messages.length > 0){
+      var lastMessageDate = Date.parse(messages[messages.length - 1].date); // Error here on Maggie's computer
+
+    }else{
+      var lastMessageDate = Date.parse(messages[0].date); // Error here on Maggie's computer
+    }
     // printLog("[info]\tLast message date raw: " + messages[messages.length -1].date);
     // printLog("[info]\tlast message date: " + lastMessageDate);
 
@@ -215,7 +239,7 @@
     contacts.forEach(function(contact){
       numbersByPriority.forEach(function(number){
         if(stillSearching){
-          if (contact[number] != null){
+          if (contact[number] != undefined){
             var numericNumber = contact[number].replace(/\D/g,'');
             if (numericNumber.toString().length == 10){
               numericNumber = Number("1" + numericNumber)
@@ -244,8 +268,17 @@
     printLog("[querying]\tSQL => " + messages_sql);
 
     messagesDb.serialize(function(){
-      var messages = [];
-      var messagesCount = 0;
+      messagesDb.each("select count(*) from message", function(err, row){
+        if (err){
+          printLog("Db select error: " + err);
+        }
+        console.log(row);
+      });
+    });
+
+    var messagesCount = 0;
+    var messages = [];
+    messagesDb.serialize(function(){
       messagesDb.each(messages_sql, function(err, row){
         if (err){
           printLog("Db select error: " + err);
@@ -319,8 +352,9 @@
     var allConversationsStats = calculateStats(messagesLookup[uniqueContacts[0]]);
 
     printLog("[info]\tInitial stats: " + JSON.stringify(allConversationsStats))
+    var tempStats = {}
     for(var i = 1; i < uniqueContacts.length; i++){
-      var tempStats = calculateStats(messagesLookup[uniqueContacts[i]]);
+      tempStats = calculateStats(messagesLookup[uniqueContacts[i]]);
       Object.keys(tempStats).forEach(function(key){
         if (!isNaN(tempStats[key])) {
           allConversationsStats[key] = parseFloat(allConversationsStats[key]) +  parseFloat(tempStats[key]);
@@ -329,6 +363,7 @@
     }
     printLog("[info]\tAll Stats Total:" + JSON.stringify(allConversationsStats));
 
+    console.log(tempStats);
     Object.keys(tempStats).forEach(function(key){
       allConversationsStats[key] /= uniqueContacts.length
     });
