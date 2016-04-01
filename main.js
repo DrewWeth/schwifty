@@ -258,9 +258,7 @@
     return contactLookup;
   }
 
-
   function selectFromDbs(messagesDb, contactsDbExists){
-
     // Gets SQL statement from file.
     var messages_sql = yank_messages_sql();
     var contacts_sql = yank_contacts_sql();
