@@ -11,6 +11,8 @@
     <script src="js/react-dom.js"></script>
     <script src="js/chart.js"></script>
     <script src="js/jquery-2.2.1.min.js"></script>
+    <script src="js/scrollTo.js"></script>
+    <script src="js/mark.min.js"></script>
   </head>
   <body>
     <div class="container">
@@ -59,18 +61,34 @@
       <div class="row">
         <div class="col-sm-3">
           <div>
-            <!-- <select id="selectConvo" onchange="selectConvoChanged()"> -->
-            </select>
-
-              <div class="form-group">
-                  <input id="individual-search" class="form-control" type="search" placeholder="Search" />
-              </div>
-              <div id="searchlist" class="list-group"></div>
+            <div class="form-group">
+                <input id="individual-search" class="form-control" type="search" placeholder="Search" />
+            </div>
           </div>
         </div>
         <div class="col-sm-9">
+          <form id="text-search-form">
+            <input id="text-search" class="pull-right form-control" type="search" placeholder="Search all messages" />
+          </form>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-sm-3">
+          <div id="searchlist" class="list-group"></div>
+        </div>
+        <div class="col-sm-9">
+
+          <div id="text-search-section" style="display:none">
+            <div id="text-search-count" class="bottom-sep"></div>
+            <div id="text-search-results"></div>
+          </div>
           <div id="individual-section" style="display: none;">
             <div class="row stats-row">
+              <div class="col-sm-8">
+                <h1 id="contact-name">
+                </h1>
+                <div id="contact-number"></div>
+              </div>
               <div class="col-sm-4">
                 <div>Conversation spans <b id="life-in-days"></b> days</div>
                 <div>First message on <span id="first-message-date"></div>
@@ -99,9 +117,11 @@
                 <div>outgoing vocab size</div>
               </div>
             </div>
-          </div>
-          <div id="individual-graph">
-            <canvas id="canvas-one"></canvas>
+            <div class="row">
+              <div id="individual-graph">
+                <canvas id="canvas-one"></canvas>
+              </div>
+            </div>
           </div>
           <div id="commentArea" class="commentArea"></div>
         </div>

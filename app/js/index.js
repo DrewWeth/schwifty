@@ -1,17 +1,6 @@
 var Humanize = require('humanize-plus');
 var ipcRenderer = require('electron').ipcRenderer;
 
-// document.getElementById("convo").onsubmit = function(){
-//   console.log("Form submitted");
-//   ipcRenderer.send("async-form", document.getElementById("chat_identifier").value);
-//   return false;
-// }
-
-
-// document.getElementById("btnGo").onclick = function(){
-//   ipcRenderer.send("goEvent", true);
-// }
-
 ipcRenderer.on("send-console", function(event, args){
   console.log(args);
 });
@@ -50,16 +39,18 @@ ipcRenderer.on("done-loading-chats", function(event, args){
     var contact = contactLookup[chat.replace(/\D/g,'')]
 
     if(contact === undefined || contact == null){
-
+      var textName = document.createTextNode(chat);
+      var nameDiv = document.createElement("div").appendChild(textName)
+      link.appendChild(nameDiv);
     }else{
-      var textName = document.createTextNode(contact.First + " " + contact.Last);
+      var textName = document.createTextNode(contact.First + " " + contact.Last + " " + chat);
       var nameDiv = document.createElement("div").appendChild(textName)
       link.appendChild(nameDiv);
     }
 
-    var textNumber = document.createTextNode(chat);
-    var numberDiv = document.createElement("div").appendChild(textNumber)
-    link.appendChild(numberDiv);
+    // var textNumber = document.createTextNode(chat);
+    // var numberDiv = document.createElement("div").appendChild(textNumber)
+    // link.appendChild(numberDiv);
 
     // option.appendChild(text);
     // selectConvo.appendChild(option);
@@ -105,10 +96,81 @@ $("#individual-search").keyup(function () {
     });
 });
 
+document.getElementById("text-search-form").onsubmit = function(){
+  console.log("Form submitted");
+  ipcRenderer.send("text-search-form-submitted", document.getElementById("text-search").value);
+  document.getElementById("individual-section").style.display = "none";
+  document.getElementById("commentArea").style.display = "none";
+  document.getElementById("text-search-section").style.display = "block";
+  return false;
+}
+
+ipcRenderer.on("text-search-results", function(event, results){
+  var messages = results.matchingMessages;
+  var target = results.target;
+  var textResults = document.getElementById("text-search-results");
+  var individualSection = document.getElementById("individual-section");
+
+  textResults.innerHTML = "";
+
+  var textSearchCount = document.getElementById("text-search-count");
+  if(messages.length == 1){
+    textSearchCount.innerHTML = "1 message with " + target + " in it."
+  }else{
+    textSearchCount.innerHTML = messages.length + " messages with " + target + " in them.";
+  }
+
+  messages.forEach(function(message){
+    var div = document.createElement('div');
+    var divDirection = document.createElement('span');
+    var divMessage = document.createElement('div');
+    var divDetails = document.createElement('div');
+    divDetails.className += ' fixed-details';
+    divMessage.className += ' search-result-message';
+    if(message.is_from_me == "1"){
+      divDirection.appendChild(document.createTextNode("Sent"));
+      divDirection.className += ' label label-primary';
+    }else{
+      divDirection.appendChild(document.createTextNode("Received"));
+      divDirection.className += ' label label-success';
+    }
+    divDetails.appendChild(document.createTextNode(message.contact.friendly + " - "))
+    divDetails.appendChild(document.createTextNode(message.date))
+
+    div.id = message.id;
+    div.className += ' bottom-sep';
+    var message = document.createTextNode(message.message);
+    textResults.appendChild(div);
+    div.addEventListener("click", function(event){
+      ipcRenderer.send("text-snippet-clicked", { id: this.id, target: document.getElementById('text-search').value } );
+    });
+    divMessage.appendChild(message);
+    div.appendChild(divMessage);
+    div.appendChild(divDirection);
+    divMessage.appendChild(divDetails);
+
+  });
+
+  $('.search-result-message').mark(target);
+
+});
+
 
 ipcRenderer.on("select-convo-changed-reply", function(event, arg){
+  console.log(arg);
+
   var stats = arg["stats"];
   document.getElementById("individual-section").style.display="block";
+  document.getElementById("commentArea").style.display="block";
+  document.getElementById("text-search-section").style.display="none";
+
+  if (arg.contact){
+    document.getElementById("contact-number").innerHTML = arg.contact.chat_identifier;
+    document.getElementById("contact-name").innerHTML = arg.contact.friendly;
+  }else{
+    document.getElementById("contact-number").innerHTML = "";
+    document.getElementById("contact-name").innerHTML = "";
+  }
   document.getElementById("messages-count-total").innerHTML = stats.totalCount;
   document.getElementById("incoming-message-count").innerHTML = stats.receivedCount;
   document.getElementById("outgoing-message-count").innerHTML = stats.sentCount;
@@ -120,6 +182,15 @@ ipcRenderer.on("select-convo-changed-reply", function(event, arg){
   document.getElementById("life-in-days").innerHTML = stats.textingLifeAgeInDays;
   document.getElementById("first-message-date").innerHTML = stats.firstMessageDate;
   document.getElementById("last-message-date").innerHTML = stats.lastMessageDate;
+
+  // console.log("hasContext:\t" + arg["hasContext"]);
+  // console.log("context:\t" + arg["context"]);
+
+  // Contextual movement
+  // console.log("CONTEXT:\t" + JSON.stringify(arg["contextMessage"]));
+  // if(contextMessage){
+  //   document.getElementById(contextualMessage.id).style += " background-color: blue";
+  // }
 
   var lineChartData = getConversationGraph(arg["chat"]);
   var oldcanv = document.getElementById('canvas-one');
@@ -135,11 +206,11 @@ ipcRenderer.on("select-convo-changed-reply", function(event, arg){
 
   var ChatBox = React.createClass({
     render: function() {
-      var children = []
+      var children = [];
       var keyCounter = 0;
       this.props.chats.forEach(function(chat){
         if (chat.is_from_me == 1){
-          children.push(React.createElement("div", {key: keyCounter, className:"bubbledRight"}, chat.message));
+          children.push(React.createElement("div", {key: keyCounter, className:"bubbledRight", id:chat.id}, chat.message));
         }else{
           children.push(React.createElement("div", {key: keyCounter, className:"bubbledLeft"}, chat.message));
         }
@@ -159,16 +230,26 @@ ipcRenderer.on("select-convo-changed-reply", function(event, arg){
     }
   });
 
-  ReactDOM.render(
-      React.createElement(ChatBox, {chats: arg["chat"]}),
-      document.getElementById('commentArea')
-    );
+  console.log("Rendering chat...");
 
+  ReactDOM.render(
+    React.createElement(ChatBox, {chats: arg["chat"]}),
+    document.getElementById('commentArea')
+  );
+
+  if(arg.hasContext){
+    var contextDiv = document.getElementById(arg.contextId);
+    console.log(contextDiv);
+    console.log(window.find(arg.wholeMessage, false, false, true, false, true, true));
+  }
+  console.log("Rendering stats area...");
 
   ReactDOM.render(
     React.createElement(StatBox, {stats: arg["stats"]}),
     document.getElementById('statsArea')
   );
+
+  console.log("Done...");
 });
 
 var dateFormat = require('dateformat');
@@ -186,7 +267,6 @@ function getConversationGraph(messages){
     } else {
       xData.push(dateFormat(tempX, "mmmm, yyyy"));
       yData.push(tempY);
-
 
       tempX = new Date(message.date);
       tempY = 1;
@@ -222,6 +302,16 @@ ipcRenderer.on("notify", function(event, arg){
     body: arg["body"]
   });
 });
+
+function findPos(obj) {
+    var curtop = 0;
+    if (obj.offsetParent) {
+        do {
+            curtop += obj.offsetTop;
+        } while (obj = obj.offsetParent);
+    return [curtop];
+    }
+}
 
 ipcRenderer.on('async-form-reply', function(event, arg) {
   console.log(arg);

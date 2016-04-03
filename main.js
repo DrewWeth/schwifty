@@ -22,7 +22,10 @@
   var messagesDbFilename = "3d0d7e5fb2ce288813306e4d4636395e047a3d28";
   var contactsDbFilename = "31bb7ba8914766d4ba40d6dfb6113c8b614be442";
   var messagesLookup = {};
+  var contactLookup = {};
   var uniqueContacts = [];
+  var allMessages = [];
+
   var messages_filepath = "", contacts_filepath = "";
 
   // var logger = new (winston.Logger)({
@@ -41,7 +44,7 @@
 
   function createWindow () {
     // Create the browser window.
-    mainWindow = new BrowserWindow({width: 1280, height: 600, minWidth:800, minHeight:600, title: "Schwifty Text Analyzer"});
+    mainWindow = new BrowserWindow({width: 1280, height: 700, minWidth:800, minHeight:600, title: "Schwifty Text Analyzer"});
     mainWindow.openDevTools();
 
     // mainWindow.testData = "ayyy lmao";
@@ -69,7 +72,8 @@
 
     ipcMain.on("select-convo-changed", function(event, arg){
       printLog(arg);
-      var result = {chat: messagesLookup[arg], stats: calculateStats(messagesLookup[arg])}
+
+      var result = { contact: resolveContact(arg), chat: messagesLookup[arg], stats: calculateStats(messagesLookup[arg])}
       event.sender.send("select-convo-changed-reply", result);
     });
 
@@ -78,13 +82,36 @@
       event.sender.send('async-form-reply', messagesLookup[arg].length);
     });
 
-    ipcMain.on('goEvent', function(event, arg){
-      var notif = { title:"Ayyy lmao", body:"You pressed the button.", convos:uniqueContacts };
-      event.sender.send("notify", notif)
-      printLog();
+    ipcMain.on("text-search-form-submitted", function(event, target){
+      var matchingMessages = searchTexts(target);
+
+      console.log("searchTexts:");
+      event.sender.send("text-search-results", { matchingMessages: matchingMessages, target: target } );
     });
 
+    ipcMain.on('goEvent', function(event, arg){
+      var notif = { title:"Ayyy lmao", body:"You pressed the button.", convos:uniqueContacts };
+      event.sender.send("notify", notif);
+    });
 
+    ipcMain.on("text-snippet-clicked", function(event, arg){
+      var id = arg["id"];
+      var target = arg["target"];
+      console.log("target:\t" + target);
+
+      var contextualMessage = allMessages[id];
+      var result = {
+        contact: resolveContact(contextualMessage.chat_identifier),
+        chat: messagesLookup[contextualMessage.chat_identifier],
+        stats: calculateStats(messagesLookup[contextualMessage.chat_identifier]),
+        hasContext: true,
+        contextId: contextualMessage.id,
+        contextTarget: target,
+        wholeMessage: contextualMessage.message
+      };
+
+      event.sender.send("select-convo-changed-reply", result);
+    });
 
     // Emitted when the window is closed.
     mainWindow.on('closed', function() {
@@ -99,6 +126,11 @@
     mainWindow.webContents.on('did-finish-load', function() {
         mainWindow.webContents.send('send-console', value);
     });
+  }
+
+  function getContextualMessage(arg){
+    console.log("WHATTTTT:\t" + allMessages[arg]);
+    return allMessages[arg];
   }
 
   function calculateStats(messages){
@@ -231,6 +263,20 @@
     });
   }
 
+  function searchTexts(target){
+    return allMessages.filter(function(message){
+      return message.message.toLowerCase().indexOf(target.toLowerCase()) >= 0;
+    });
+  }
+
+  function cleanNumber(str){
+    var number = str.replace(/\D/g,'');
+    if (number.toString().length == 10){
+      number = Number("1" + number)
+    }
+    return number;
+  }
+
   function parseContacts(contacts){
     var numbersByPriority = ["phone_mobile", "phone_work", "phone_other", "phone_iphone", "phone_main"]
     var contactLookup = {}
@@ -240,10 +286,8 @@
       numbersByPriority.forEach(function(number){
         if(stillSearching){
           if (contact[number] != undefined){
-            var numericNumber = contact[number].replace(/\D/g,'');
-            if (numericNumber.toString().length == 10){
-              numericNumber = Number("1" + numericNumber)
-            }
+            var numericNumber = cleanNumber(contact[number])
+
             stillSearching = false;
             contactsFoundCount += 1;
             contactLookup[numericNumber] = contact;
@@ -276,6 +320,7 @@
 
     var messagesCount = 0;
     var messages = [];
+    var messageCounter = 0;
     messagesDb.serialize(function(){
       messagesDb.each(messages_sql, function(err, row){
         if (err){
@@ -285,7 +330,8 @@
           row.message = "";
         }
         messagesCount += 1;
-
+        row.id = messageCounter;
+        messageCounter += 1;
         messages.push(row);
       },function(){
         printLog("messagesCount: " + messagesCount);
@@ -322,12 +368,12 @@
 
   function parseMessages(messages, contacts){
     printLog("[parsing]");
-    var contactLookup = {}
     if (contacts != null){
       contactLookup = parseContacts(contacts);
     }
 
     messages.forEach(function(message){
+      message.contact = resolveContact(message.chat_identifier);
       if (messagesLookup[message.chat_identifier] === undefined){
         messagesLookup[message.chat_identifier] = [];
         messagesLookup[message.chat_identifier].push(message);
@@ -336,7 +382,8 @@
         messagesLookup[message.chat_identifier].push(message);
       }
     });
-
+    allMessages = messages;
+    // Calculating stats
     var stats = {}
     var incomingInit = 0;
     var outgoingInit = 0;
@@ -477,3 +524,12 @@
       createWindow();
     }
   });
+
+  function resolveContact(chat_identifier){
+      var contactObj = contactLookup[cleanNumber(chat_identifier)]
+      if (contactObj){
+        return { friendly: contactObj.First + " " + contactObj.Last, chat_identifier: chat_identifier };
+      }
+      return { friendly: chat_identifier, chat_identifier: chat_identifier };
+
+  }

@@ -1,8 +1,30 @@
+.fixed-details{
+  float: right;
+  font-size:70%;
+  color:#777;
+}
+
 .commentArea {
   font: 14px Arial;
   padding: 0 10px;
   margin-top: 20px;
 }
+
+.bottom-sep{
+  margin-bottom: 10px;
+}
+
+.div-direction-from{
+  float:left;
+  background:blue;
+}
+
+
+.div-direction-to{
+  float:left;
+  background:green;
+}
+
 
 
 .navbar-right {
