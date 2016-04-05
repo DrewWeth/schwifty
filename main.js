@@ -25,6 +25,7 @@
   var contactLookup = {};
   var uniqueContacts = [];
   var allMessages = [];
+  var allConversationsStatsAvg = {};
 
   var messages_filepath = "", contacts_filepath = "";
 
@@ -57,7 +58,7 @@
     });
 
     ipcMain.on("backup-selected", function(event, arg){
-      console.log(arg);
+      // console.log(arg);
       messagesLookup = {};
       uniqueContacts = [];
       mainWindow.loadURL('file://' + __dirname + '/app/index.html');
@@ -129,7 +130,6 @@
   }
 
   function getContextualMessage(arg){
-    console.log("WHATTTTT:\t" + allMessages[arg]);
     return allMessages[arg];
   }
 
@@ -214,14 +214,14 @@
     var stats = { sentCount:outgoingCount,
       receivedCount:incomingCount,
       totalCount: (outgoingCount + incomingCount),
-      incomingLengthAverage:(incomingLengthTotal * 1.0 / incomingCount).toFixed(1),
-      outgoingLengthAverage:(outgoingLengthTotal * 1.0 / outgoingCount).toFixed(1),
+      incomingLengthAverage: Math.round(incomingLengthTotal * 1.0 / incomingCount * 10)/10 || 0,
+      outgoingLengthAverage: Math.round(outgoingLengthTotal * 1.0 / outgoingCount * 10)/10 || 0,
       incomingVocabCount: incomingVocabCount,
       outgoingVocabCount: outgoingVocabCount,
-      vocabPerIncomingMessage: (incomingVocabCount * 1.0 / incomingCount).toFixed(1),
-      vocabPerOutgoingMessage: (outgoingVocabCount * 1.0 / outgoingCount).toFixed(1),
-      textingLifeAgeInDays: ((lastMessageDate - firstMessageDate) / 1000.0 / 60 / 60 / 24).toFixed(1),
-      textingIntensityPerDay: (textingIntensityPerSecond * 60.0 * 60.0 * 24.0),
+      vocabPerIncomingMessage: Math.round(incomingVocabCount * 1.0 / incomingCount * 10)/10 || 0,
+      vocabPerOutgoingMessage: Math.round(outgoingVocabCount * 1.0 / outgoingCount * 10)/10 || 0,
+      textingLifeAgeInDays: Math.round((lastMessageDate - firstMessageDate) / 1000.0 / 60 / 60 / 24 * 100)/100,
+      textingIntensityPerDay: Math.round(textingIntensityPerSecond * 60.0 * 60.0 * 24.0 * 100)/100 || 0,
       firstMessageDate:firstMessageFormatted,
       lastMessageDate: lastMessageFormatted
     }
@@ -309,14 +309,14 @@
 
     printLog("[querying]\tSQL => " + messages_sql);
 
-    messagesDb.serialize(function(){
-      messagesDb.each("select count(*) from message", function(err, row){
-        if (err){
-          printLog("Db select error: " + err);
-        }
-        console.log(row);
-      });
-    });
+    // messagesDb.serialize(function(){
+    //   messagesDb.each("select count(*) from message", function(err, row){
+    //     if (err){
+    //       printLog("Db select error: " + err);
+    //     }
+    //     console.log(row);
+    //   });
+    // });
 
     var messagesCount = 0;
     var messages = [];
@@ -394,54 +394,136 @@
         incomingInit += 1;
       }
     });
-    var allConversationsStats = calculateStats(messagesLookup[uniqueContacts[0]]);
+    allConversationsStatsAvg = calculateStats(messagesLookup[uniqueContacts[0]]);
 
-    printLog("[info]\tInitial stats: " + JSON.stringify(allConversationsStats))
     var tempStats = {}
     for(var i = 1; i < uniqueContacts.length; i++){
       tempStats = calculateStats(messagesLookup[uniqueContacts[i]]);
       Object.keys(tempStats).forEach(function(key){
         if (!isNaN(tempStats[key])) {
-          allConversationsStats[key] = parseFloat(allConversationsStats[key]) +  parseFloat(tempStats[key]);
+          allConversationsStatsAvg[key] = parseFloat(allConversationsStatsAvg[key]) +  parseFloat(tempStats[key]);
         }
       });
     }
-    printLog("[info]\tAll Stats Total:" + JSON.stringify(allConversationsStats));
+    // printLog("[info]\tAll Stats Total:" + JSON.stringify(allConversationsStatsAvg));
 
-    console.log(tempStats);
+    // console.log(tempStats);
     Object.keys(tempStats).forEach(function(key){
-      allConversationsStats[key] /= uniqueContacts.length
+      allConversationsStatsAvg[key] /= uniqueContacts.length
     });
 
-    printLog("[info]\tAll Stats Avg:" + JSON.stringify(allConversationsStats));
+    // printLog("[info]\tAll Stats Avg:" + JSON.stringify(allConversationsStatsAvg));
     var stats = {incomingInit: incomingInit,
       outgoingInit: outgoingInit,
-      allConversationsStats: allConversationsStats
+      allConversationsStatsAvg: allConversationsStatsAvg
     };
     printLog("[info]\tUnique chat_identifiers => " + (uniqueContacts.length));
     var notif = {title:"Done loading chats", body:"Total chats: " + (uniqueContacts.length)}
     var loadedData = {messages: messages, uniqueContacts: uniqueContacts, messagesLookup: messagesLookup, stats:stats, contactLookup: contactLookup}
+
     mainWindow.webContents.send("done-loading-chats", loadedData);
-    printLog(stats)
+    mainWindow.webContents.send("message-analysis-complete", messages);
 
-    printLog("[outputting]");
-    var jsonMessages = JSON.stringify(messages);
-    var outputFilepath = envHome + "/Desktop/output.txt"
-    var tempData = [];
-    var lines = [];
-    for(var i = 0; i < messages.length; i++){
-      tempData = [messages[i].is_from_me, messages[i].date, messages[i].chat_identifier, messages[i].message]
-      lines.push(tempData.join("\t"));
-    }
+    // printLog("[outputting]");
+    // var jsonMessages = JSON.stringify(messages);
+    // var outputFilepath = envHome + "/Desktop/output.txt"
+    // var tempData = [];
+    // var lines = [];
+    // for(var i = 0; i < messages.length; i++){
+    //   tempData = [messages[i].is_from_me, messages[i].date, messages[i].chat_identifier, messages[i].message]
+    //   lines.push(tempData.join("\t"));
+    // }
+    // fs.writeFile(outputFilepath, lines.join("\n"), function(err) {
+    //   if(err) {
+    //       return printLog(err);
+    //   }
+    //   printLog("[done] saved file to " + outputFilepath);
+    // });
 
-     fs.writeFile(outputFilepath, lines.join("\n"), function(err) {
-         if(err) {
-            return printLog(err);
-        }
-        printLog("[done] saved file to " + outputFilepath);
+
+    var statsArr = [];
+    uniqueContacts.forEach(function(chat_identifier){
+      statsArr.push( { chat_identifier: chat_identifier, stats: calculateStats(messagesLookup[chat_identifier]) } );
+    })
+    statsArr.sort(function(a, b) {
+         return b.stats.totalCount - a.stats.totalCount;
     });
 
-    mainWindow.webContents.send("message-analysis-complete", messages);
+    statsArr.map(function(statObj){
+      statObj.stats.contactName = resolveContact(statObj.chat_identifier).friendly;
+      return statObj;
+    });
+
+    // var stats = { sentCount:outgoingCount,
+    //   receivedCount:incomingCount,
+    //   totalCount: (outgoingCount + incomingCount),
+    //   incomingLengthAverage:(incomingLengthTotal * 1.0 / incomingCount).toFixed(1),
+    //   outgoingLengthAverage:(outgoingLengthTotal * 1.0 / outgoingCount).toFixed(1),
+    //   incomingVocabCount: incomingVocabCount,
+    //   outgoingVocabCount: outgoingVocabCount,
+    //   vocabPerIncomingMessage: (incomingVocabCount * 1.0 / incomingCount).toFixed(1),
+    //   vocabPerOutgoingMessage: (outgoingVocabCount * 1.0 / outgoingCount).toFixed(1),
+    //   textingLifeAgeInDays: ((lastMessageDate - firstMessageDate) / 1000.0 / 60 / 60 / 24).toFixed(1),
+    //   textingIntensityPerDay: (textingIntensityPerSecond * 60.0 * 60.0 * 24.0),
+    //   firstMessageDate:firstMessageFormatted,
+    //   lastMessageDate: lastMessageFormatted
+    //
+
+
+    var columns = [{name:"Name", statName:"contactName"},
+    {name:"Total Texts", statName:"totalCount"},
+    {name:"Incoming Count", statName:"receivedCount"},
+    {name:"Outgoing Count", statName:"sentCount"},
+    {name:"Incoming Length Average", statName:"incomingLengthAverage"},
+    {name:"Outgoing Length Average", statName:"outgoingLengthAverage"},
+    {name:"Total Incoming Vocab", statName:"incomingVocabCount"},
+    {name:"Vocab per Incoming Text", statName:"vocabPerIncomingMessage"},
+    {name:"Total Outgoing Vocab", statName:"outgoingVocabCount"},
+    {name:"Vocab per Outgoing Text", statName:"vocabPerOutgoingMessage"},
+    {name:"Texting Duration (days)", statName:"textingLifeAgeInDays"},
+    {name:"Average Texts Per Day", statName:"textingIntensityPerDay"},
+    ];
+    var results = { columns: columns, stats: statsArr };
+    mainWindow.webContents.send("rankings-analysis-complete", results);
+
+    // Index sort and resolving contact.
+    // var indecies = sortReturningIndecies(statsArr, "totalCount");
+    // var a = indecies.map(function(index){
+    //   console.log(statsArr[index]);
+    //   return resolveContact(statsArr[index].chat_identifier).friendly;
+    // });
+    // console.log(a);
+  }
+
+  // Returns index of sorted array in DECREASING order.
+  function sortReturningIndecies(test, objectSortString){
+    var test_with_index = [];
+    // for (var i in test) {
+    //     test_with_index.push([test[i], i]);
+    // }
+    test.forEach(function(element, index){
+      test_with_index.push( [ test[index], index ] );
+    });
+
+    test_with_index.sort(function(left, right) {
+      return left[0].stats[objectSortString] > right[0].stats[objectSortString] ? -1 : 1;
+    });
+
+    var indexes = [];
+    test = [];
+    test_with_index.forEach(function(e, i){
+      indexes.push(test_with_index[i][1]);
+    });
+
+    return indexes;
+  }
+
+  Array.prototype.first = function(n){
+    return this.slice(0, n);
+  }
+
+  Array.prototype.last = function(n){
+    this.slice(Math.max(this.length - n, 1))
   }
 
   function inspect(obj){
@@ -469,7 +551,7 @@
       });
 
       printLog("[info]\tThere are " + (files.length) + " folders")
-      console.log(files);
+      // console.log(files);
       mainWindow.webContents.send("backups-found", files);
       messages_filepath = envHome + backupExt;
       contacts_filepath = envHome + backupExt;
@@ -528,8 +610,7 @@
   function resolveContact(chat_identifier){
       var contactObj = contactLookup[cleanNumber(chat_identifier)]
       if (contactObj){
-        return { friendly: contactObj.First + " " + contactObj.Last, chat_identifier: chat_identifier };
+        return { friendly: (contactObj.First || "") + " " + (contactObj.Last || ""), chat_identifier: chat_identifier };
       }
       return { friendly: chat_identifier, chat_identifier: chat_identifier };
-
   }

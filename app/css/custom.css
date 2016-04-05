@@ -1,3 +1,9 @@
+.fixed
+{
+    position:fixed;
+}
+
+
 .fixed-details{
   float: right;
   font-size:90%;

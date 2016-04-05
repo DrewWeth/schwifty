@@ -9,6 +9,45 @@ document.getElementById("setup-link").addEventListener("click", function(e){
   ipcRenderer.send("link-setup-page", true);
 });
 
+ipcRenderer.on("rankings-analysis-complete", function(event, arg){
+  var table = document.getElementById("rankings-table");
+  var tableHeader = document.createElement('thead');
+  var tableBody = document.createElement('tbody');
+
+  var stats = arg.stats
+  var columns = arg.columns;
+
+  var row = document.createElement('tr');
+  row.id="rankings-table-header-row";
+  columns.forEach(function(column){
+    var header = document.createElement('th');
+    header.data = column.statName;
+    header.appendChild(document.createTextNode(column.name));
+    row.appendChild(header);
+  });
+  tableHeader.appendChild(row);
+
+  stats.forEach(function(contact){
+    var row = document.createElement('tr');
+    columns.forEach(function(column, rowIndex){
+      var cell = document.createElement('td');
+      cell.appendChild(document.createTextNode(contact.stats[column.statName]));
+      row.appendChild(cell);
+    });
+    tableBody.appendChild(row);
+  });
+  table.appendChild(tableHeader);
+  table.appendChild(tableBody);
+  $(document).ready(function(){
+    $('#rankings-table').DataTable({
+      "paging":false,
+      "aaSorting": []
+    });
+  });
+});
+
+
+
 ipcRenderer.on("done-loading-chats", function(event, args){
   var uniqueContacts = args["uniqueContacts"];
   var messages = args["messages"];
@@ -22,8 +61,8 @@ ipcRenderer.on("done-loading-chats", function(event, args){
   document.getElementById("messages-count-value").innerHTML = Humanize.intComma(messages.length);
   document.getElementById("incoming-init").innerHTML = stats["incomingInit"];
   document.getElementById("outgoing-init").innerHTML = stats["outgoingInit"];
-  document.getElementById("all-incoming-avg").innerHTML = stats["allConversationsStats"]["incomingLengthAverage"].toFixed(1)
-  document.getElementById("all-outgoing-avg").innerHTML = stats["allConversationsStats"]["outgoingLengthAverage"].toFixed(1)
+  document.getElementById("all-incoming-avg").innerHTML = stats.allConversationsStatsAvg.incomingLengthAverage.toFixed(1)
+  document.getElementById("all-outgoing-avg").innerHTML = stats.allConversationsStatsAvg.outgoingLengthAverage.toFixed(1)
   var options = {
     year: "numeric", month: "short",
     day: "numeric"
@@ -43,7 +82,7 @@ ipcRenderer.on("done-loading-chats", function(event, args){
       var nameDiv = document.createElement("div").appendChild(textName)
       link.appendChild(nameDiv);
     }else{
-      var textName = document.createTextNode(contact.First + " " + contact.Last + " " + chat);
+      var textName = document.createTextNode((contact.First || "") + " " + (contact.Last || "") + " " + chat);
       var nameDiv = document.createElement("div").appendChild(textName)
       link.appendChild(nameDiv);
     }
@@ -87,7 +126,7 @@ function trackConvoButtons(){
 $("#individual-search").keyup(function () {
     // console.log("Searching!")
     var filter = jQuery(this).val();
-    jQuery("div a").each(function () {
+    jQuery("#searchlist a").each(function () {
         if (jQuery(this).text().search(new RegExp(filter, "i")) < 0) {
             jQuery(this).hide();
         } else {
@@ -252,6 +291,16 @@ ipcRenderer.on("select-convo-changed-reply", function(event, arg){
   console.log("Done...");
 });
 
+function getMonthsBetween(to, from){
+  var months = to.getMonth() - from.getMonth()
+  + (12 * (to.getFullYear() - from.getFullYear()));
+
+  if(to.getDate() < from.getDate()){
+    months--;
+  }
+  return months;
+}
+
 var dateFormat = require('dateformat');
 function getConversationGraph(messages){
   var xData = [];
@@ -261,12 +310,24 @@ function getConversationGraph(messages){
   var tempY = 0;
 
   messages.forEach(function(message){
-    var currentMonth = new Date(message.date).getMonth();
-    if (currentMonth === tempX.getMonth()){
+    var currentDate = new Date(message.date);
+    if (currentDate.getMonth() === tempX.getMonth()){
       tempY += 1;
     } else {
       xData.push(dateFormat(tempX, "mmmm, yyyy"));
       yData.push(tempY);
+
+      // If there's a difference of 1 month
+      var monthsDiff = getMonthsBetween(currentDate, tempX);
+      if(monthsDiff > 1){
+        // if monthsDiff == 2, then set one month to 0
+
+        // If there's a difference of 2 or more
+        for(var i = 0; i < monthsDiff - 1; i++){
+          xData.push(dateFormat(tempX.setMonth(tempX.getMonth() + 1), "mmmm, yyyy"));
+          yData.push(0);
+        }
+      }
 
       tempX = new Date(message.date);
       tempY = 1;
